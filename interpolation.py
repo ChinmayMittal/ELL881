@@ -1,88 +1,50 @@
 import random
 import math
+from n_gram import NGramLM
 from preprocess import preprocess, read_data
 
-def create_n_grams(tokens, n=1):
-    ### tokens is a list of tokens of a sentence including <s> and </s>
-    tokens = tokens[1:] ### remove the first <s>
-    tokens = ["<s>"] * (n-1) + tokens ## appropriate sentence padding depending on the model
-    n_grams = [ (tuple([tokens[i-p-1] for p in reversed(range(n-1))]), tokens[i]) for i in range(n-1, len(tokens))]
-    return n_grams
 
-class NGramLM():
+class InterpolationLM():
     
-    def __init__(self, n):
+    def __init__(self, n, interpolation_weights = None):
+        ### will be an interpolation of n-gram (n-1)-gram ........ 1-gram models
         self.n = n
+        self.models = [NGramLM(n=i) for i in range(1,n+1)]
+        if(interpolation_weights is None):
+            self.interpolation_weights = [1/n for _ in range(1,n+1)]
+        else:
+            self.interpolation_weights = interpolation_weights
         
-        self.context = {} #### doubly index dict context -> next_word -> how many times next_word follows context
-        self.context_cnt = {} ### count of how many times context has appeared
-        self.vocabulary = set(("<s>", "</s>", "<unk>"))
-        
+        self.vocabulary = set()
+    
     def update(self, sentence):
-        
+
         ### sentence is a list of tokens including <s> and </s>
         for token in sentence:
             self.vocabulary.add(token)
         
-        ngrams = create_n_grams(sentence, n=self.n) ### creates a list of ngrams
-        for ngram in ngrams:
-            context, next_word = ngram
-            if( context not in self.context):
-                self.context[context] = {}
-                self.context_cnt[context] = 0
-            if( next_word not in self.context[context]):
-                self.context[context][next_word] = 0
-            
-            self.context[context][next_word] += 1
-            self.context_cnt[context] += 1
-            
-                
-    def add_k_smoothing(self, k=1):
+        for model in self.models:
+            model.update(sentence)
         
-        all_context = self.context.keys()
-        for context in all_context:
-            self.context_cnt[context] += k*len(self.vocabulary) ### every word in vocabulary is seen k more times
-            for word in self.vocabulary:
-                
-                if context not in self.context:
-                    self.context[context] = {}
-                if word not in self.context[context]:
-                    self.context[context][word] = 0
-                
-                self.context[context][word] += k
-        
-                  
     def probability_for_next_word(self, context, token):
-        ### probability of token given context
-        if token not in self.vocabulary:
-            token = "<unk>"
-        if context not in self.context:
-            return 1/len(self.vocabulary) ### to ensure probability
-
-        try:
-            if ( token not in self.context[context]):
-                n_gram_count = 0
-            else:
-                n_gram_count =  self.context[context][token]
-            context_count = self.context_cnt[context]
-            prob = n_gram_count / context_count
-        except:
-            prob = 0.0
+        ### context is a tuple of length n-1
+        probabilities = [ self.models[i-1].probability_for_next_word( context=context[self.n-i:], token=token) for i in range(1, self.n+1)]  
+        prob = 0.0
+        for i in range(1,self.n+1):
+            prob += probabilities[i-1]*self.interpolation_weights[i-1]
         
         return prob
     
     def generate_word(self, context):
         
         p = random.random()
-        possible_next_words = list(self.context[context].keys())
-        total_context_count = self.context_cnt[context]
-        cur_sum = 0 
+        possible_next_words = self.vocabulary
+        cur_prob = 0 
         for next_word in possible_next_words:
-            cur_sum += self.context[context][next_word]
-            if( p <= cur_sum/total_context_count ):
-                return next_word
-        # return random.choices(self.context[context], k=1)[0]
-    
+            cur_prob += self.probability_for_next_word(context, next_word)
+            if( p <= cur_prob ):
+                return next_word        
+
     def generate_sentence(self, max_tokens):
         ### produces till </s>  or at max max_tokens
         context = ["<s>"]*(self.n-1)
@@ -95,8 +57,8 @@ class NGramLM():
             if self.n > 1:
                 context = context[1:] + [next_word]
             
-        return " ".join(generated_words)
-    
+        return " ".join(generated_words)    
+        
     def log_prob(self, sentence):
         ### sentence is a list of tokens in the sentence including <s> and </s>
         sentence = sentence[1:] ### remove the first <s>
@@ -114,8 +76,7 @@ class NGramLM():
                 context = context[1:] + [word]
             
     
-        return log_prob
-                
+        return log_prob      
     
     def perplexity(self, text):
         
@@ -130,16 +91,13 @@ class NGramLM():
                 log_prob_sum += log_prob
             token_cnt += len(sent)-1
         
-        return math.exp(-log_prob_sum / token_cnt)
-            
+        return math.exp(-log_prob_sum / token_cnt)      
+    
         
-                
-            
         
-if __name__ == "__main__":        
- 
+if __name__ == "__main__":
     train_books = range(1,7)
-    LM = NGramLM(n=3)
+    LM = InterpolationLM(n=3, interpolation_weights=[0.25, 0.25, 0.5])
     ########### TRAINING ###################
     vocabulary = {"<s>" : 0, "</s>" : 0 , "<unk>" : 0}
 
@@ -166,9 +124,10 @@ if __name__ == "__main__":
     for tokenized_sentences in train_tokenized_sentences:
         for sent in tokenized_sentences:
             LM.update(sent)
-
+    print("Trained")
     #### add-k smoothing ###################
-    LM.add_k_smoothing(k=0.1) 
+    for i in range(1, 2):
+        LM.models[i-1].add_k_smoothing(k=0.1)
 
     ################### TESTING ############ 
     test_book = f"./Harry_Potter_Text/Book7.txt"    
@@ -177,3 +136,4 @@ if __name__ == "__main__":
 
     print(LM.perplexity(test_text))
     print( LM.generate_sentence(10) )
+    
