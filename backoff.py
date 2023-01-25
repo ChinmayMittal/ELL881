@@ -1,84 +1,84 @@
 import random
 import math
 from preprocess import preprocess, read_data
+from n_gram import create_n_grams
+from tqdm import tqdm
 
-def create_n_grams(tokens, n=1):
-    ### tokens is a list of tokens of a sentence including <s> and </s>
-    tokens = tokens[1:] ### remove the first <s>
-    tokens = ["<s>"] * (n-1) + tokens ## appropriate sentence padding depending on the model
-    n_grams = [ (tuple([tokens[i-p-1] for p in reversed(range(n-1))]), tokens[i]) for i in range(n-1, len(tokens))]
-    return n_grams
-
-class NGramLM():
+class StupidBackOffLM():
     
-    def __init__(self, n):
-        self.n = n
+    def __init__(self, n, alpha=0.4):
         
+        self.n = n
+        self.alpha = alpha
         self.context = {} #### doubly index dict context -> next_word -> how many times next_word follows context
         self.context_cnt = {} ### count of how many times context has appeared
         self.vocabulary = set(("<s>", "</s>", "<unk>"))
-        self.add_k_smoothing_lazy_update = False
-        self.k = 0
+        self.add_k_smoothing_on = False
+        self.raw_score_sum = {}
+        self.k = 0.0
         
     def update(self, sentence):
         
         ### sentence is a list of tokens including <s> and </s>
         for token in sentence:
-            self.vocabulary.add(token)
-        
-        ngrams = create_n_grams(sentence, n=self.n) ### creates a list of ngrams
-        for ngram in ngrams:
-            context, next_word = ngram
-            if( context not in self.context):
-                self.context[context] = {}
-                self.context_cnt[context] = 0
-            if( next_word not in self.context[context]):
-                self.context[context][next_word] = 0
-            
-            self.context[context][next_word] += 1
-            self.context_cnt[context] += 1
-            
+            self.vocabulary.add(token)    
+
+        for i in range(1, self.n+1):
+            #### populate all type of ngram counts
+            ngrams = create_n_grams(sentence, n=i) ### creates a list of ngrams
+            for ngram in ngrams:
+                context, next_word = ngram
+                if( context not in self.context):
+                    self.context[context] = {}
+                    self.context_cnt[context] = 0
+                if( next_word not in self.context[context]):
+                    self.context[context][next_word] = 0
                 
-    def add_k_smoothing(self, k=1, lazy_update=False):
-        
-        if not lazy_update:
-            all_context = self.context.keys()
-            for context in all_context:
-                self.context_cnt[context] += k*len(self.vocabulary) ### every word in vocabulary is seen k more times
-                for word in self.vocabulary:
-                    
-                    if context not in self.context:
-                        self.context[context] = {}
-                    if word not in self.context[context]:
-                        self.context[context][word] = 0
-                    
-                    self.context[context][word] += k
-        else:
-            self.add_k_smoothing_lazy_update = True
-            self.k = k
-                  
+                self.context[context][next_word] += 1
+                self.context_cnt[context] += 1
+                
+    def add_k_smoothing(self, k=1):
+        #### will be used for unigram
+        self.add_k_smoothing_on = True
+        self.k = k
+     
     def probability_for_next_word(self, context, token):
-        ### probability of token given context
+        
+        if context in self.raw_score_sum:
+            return ( 1 / self.raw_score_sum[context] ) * self.probability_for_next_word_helper(context, token)
+        all_possible_tokens = self.vocabulary
+        total_score_sum = 0.0
+        for next_word in all_possible_tokens:
+            total_score_sum += self.probability_for_next_word_helper(context, next_word)
+        self.raw_score_sum[context] = total_score_sum
+        return self.probability_for_next_word_helper(context, token)
+                   
+    def probability_for_next_word_helper(self, context, token):
+        
         if token not in self.vocabulary:
             token = "<unk>"
+        if len(context) == 0: ### recursive base case (unigram)
+            if token in self.context[context]:
+                if not self.add_k_smoothing_on:
+                    return self.context[context][token] / self.context_cnt[context]
+                else:
+                    return ( self.context[context][token] + self.k ) / ( self.context_cnt[context] + self.k * len(self.vocabulary) ) 
+            else:
+                if not self.add_k_smoothing_on:
+                    return 0
+                else :
+                    return (self.k) / (self.context_cnt[context] + self.k * len(self.vocabulary))
         if context not in self.context:
-            return 1/len(self.vocabulary) ### to ensure probability
-
-        try:
-            if ( token not in self.context[context]):
-                n_gram_count = 0
-            else:
-                n_gram_count =  self.context[context][token]
-            context_count = self.context_cnt[context]
-            if not self.add_k_smoothing_lazy_update:
-                prob = n_gram_count / context_count
-            else:
-                prob = (n_gram_count+self.k) / (context_count + self.k*len(self.vocabulary))
-        except:
-            prob = 0.0
+            return self.alpha*self.probability_for_next_word_helper(context[1:], token)
         
-        return prob
-    
+        if token not in self.context[context]:
+            return self.alpha * self.probability_for_next_word_helper(context[1: ], token)
+        else:
+            n_gram_count = self.context[context][token]
+            context_cnt = self.context_cnt[context]
+            prob = n_gram_count / context_cnt
+            return prob
+        
     def generate_word(self, context):
         
         p = random.random()
@@ -88,7 +88,8 @@ class NGramLM():
             cur_prob += self.probability_for_next_word(context, next_word)
             if( p <= cur_prob ):
                 return next_word
-    
+            
+
     def generate_sentence(self, max_tokens):
         ### produces till </s>  or at max max_tokens
         context = ["<s>"]*(self.n-1)
@@ -101,8 +102,9 @@ class NGramLM():
             if self.n > 1:
                 context = context[1:] + [next_word]
             
-        return " ".join(generated_words)
-    
+        return " ".join(generated_words)                         
+            
+            
     def log_prob(self, sentence):
         ### sentence is a list of tokens in the sentence including <s> and </s>
         sentence = sentence[1:] ### remove the first <s>
@@ -128,7 +130,7 @@ class NGramLM():
         log_prob_sum = 0.0
         token_cnt = 0
         _, tokenized_sentences = preprocess(text)
-        for sent in tokenized_sentences:
+        for sent in tqdm(tokenized_sentences):
             log_prob = self.log_prob(sent)
             if(log_prob == float("-inf")):
                 return float("inf")
@@ -138,15 +140,12 @@ class NGramLM():
         
         return math.exp(-log_prob_sum / token_cnt)
             
-        
-                
-            
-        
+
 if __name__ == "__main__":        
  
     train_books = range(1,7)
-    n = 5
-    LM = NGramLM(n=n)
+    n = 3
+    LM = StupidBackOffLM(n=n)
     ########### TRAINING ###################
     vocabulary = {"<s>" : 0, "</s>" : 0 , "<unk>" : 0}
 
@@ -173,12 +172,11 @@ if __name__ == "__main__":
     for tokenized_sentences in train_tokenized_sentences:
         for sent in tokenized_sentences:
             LM.update(sent)
-
-    #### add-k smoothing ###################
-    lazy_smoothing_update = n > 1
-    LM.add_k_smoothing(k=0.1, lazy_update=lazy_smoothing_update) 
+    ########### ADD-K Smoothing for base case unigram ############
+    LM.add_k_smoothing(k=0.1)
 
     ################### TESTING ############ 
+    print("TESTING .... ")
     test_book = f"./Harry_Potter_Text/Book7.txt"    
     test_text = read_data(test_book)
 
