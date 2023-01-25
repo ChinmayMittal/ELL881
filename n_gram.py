@@ -1,4 +1,5 @@
 import random
+import math
 from preprocess import preprocess, read_data
 
 def create_n_grams(tokens, n=1):
@@ -14,13 +15,16 @@ class NGramLM():
         self.n = n
         
         self.context = {}
-        self.n_gram_counter = {}   
+        self.n_gram_counter = {}  
+        self.vocabulary = set(("<s>", "</s>", "<unk>"))
         
     def update(self, sentence):
         
         ### sentence is a list of tokens including <s> and </s>
-        ngrams = create_n_grams(sentence, n=self.n) ### creates a list of ngrams
+        for token in sentence:
+            self.vocabulary.add(token)
         
+        ngrams = create_n_grams(sentence, n=self.n) ### creates a list of ngrams
         for ngram in ngrams:
             context, next_word = ngram
             if(context in self.context):
@@ -34,12 +38,15 @@ class NGramLM():
                 self.n_gram_counter[ngram] = 1
                 
                 
-    def probability_for_next_word(self, context, token):
+    def probability_for_next_word(self, context, token, add_1_smoothing=True):
         ### probability of token given context
         try:
             n_gram_count = self.n_gram_counter[(context, token)]
             context_count = float(len(self.context[context]))
-            prob = n_gram_count / context_count
+            if add_1_smoothing:
+                prob = (n_gram_count+1)/(context_count + len(self.vocabulary))
+            else:
+                prob = n_gram_count / context_count
         except:
             prob = 0.0
         
@@ -63,17 +70,52 @@ class NGramLM():
             
         return " ".join(generated_words)
     
-    def log_prob()
+    def log_prob(self, sentence):
+        ### sentence is a list of tokens in the sentence including <s> and </s>
+        sentence = sentence[1:] ### remove the first <s>
+        log_prob = 0.0
+        context = ["<s>"] * (self.n-1) if (self.n > 1) else []
+        for word in sentence:
+            next_word_prob = self.probability_for_next_word(tuple(context), word)
+            if(next_word_prob == 0.0  ):
+                log_prob = float("-inf")
+                break
+            else:
+                log_prob += math.log(next_word_prob)
+            ### update context
+            if self.n > 1 :
+                context = context[1:] + [word]
+            
+    
+        return log_prob
+                
+                
             
         
         
  
-books = range(1,7)
-LM = NGramLM(n=4)
-for book in books:
-    text = read_data(f"./Harry_Potter_Text/Book{book}.txt")
+train_books = range(1,7)
+LM = NGramLM(n=3)
+### TRAINING
+for book in train_books:
+    train_book = f"./Harry_Potter_Text/Book{book}.txt"
+    print(f"{train_book} ....")
+    text = read_data(train_book)
     tokenized_sentences = preprocess(text)
     for sent in tokenized_sentences:
         LM.update(sent)
-        
-print( LM.generate_sentence(10) )
+
+### TESTING 
+test_book = f"./Harry_Potter_Text/Book7.txt"    
+test_text = read_data(test_book)
+test_tokenized_sentences = preprocess(test_text)
+
+inf_count = 0 
+for sent in test_tokenized_sentences:
+    log_prob = LM.log_prob(sent)
+    if(log_prob != float("-inf")):
+        print(log_prob)
+    else:
+        inf_count += 1
+print(f"{inf_count/len(test_tokenized_sentences)*100}%")
+# print( LM.generate_sentence(10) )
