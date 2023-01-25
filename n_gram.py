@@ -14,8 +14,8 @@ class NGramLM():
     def __init__(self, n):
         self.n = n
         
-        self.context = {}
-        self.n_gram_counter = {}  
+        self.context = {} #### doubly index dict context -> next_word -> how many times next_word follows context
+        self.context_cnt = {} ### count of how many times context has appeared
         self.vocabulary = set(("<s>", "</s>", "<unk>"))
         
     def update(self, sentence):
@@ -27,27 +27,29 @@ class NGramLM():
         ngrams = create_n_grams(sentence, n=self.n) ### creates a list of ngrams
         for ngram in ngrams:
             context, next_word = ngram
-            if(context in self.context):
-                self.context[context].append(next_word)
-            else:
-                self.context[context] = [next_word]
+            if( context not in self.context):
+                self.context[context] = {}
+                self.context_cnt[context] = 0
+            if( next_word not in self.context[context]):
+                self.context[context][next_word] = 0
             
-            if ngram in self.n_gram_counter:
-                self.n_gram_counter[ngram] += 1
-            else:
-                self.n_gram_counter[ngram] = 1
+            self.context[context][next_word] += 1
+            self.context_cnt[context] += 1
+            
                 
     def add_k_smoothing(self, k=1):
         
         all_context = self.context.keys()
         for context in all_context:
+            self.context_cnt[context] += k*len(self.vocabulary) ### every word in vocabulary is seen k more times
             for word in self.vocabulary:
-                for _ in range(k):
-                    self.context[context].append(word)
-                    if (context, word) in self.n_gram_counter:
-                        self.n_gram_counter[(context,word)] += 1
-                    else:
-                        self.n_gram_counter[(context,word)] = 1
+                
+                if context not in self.context:
+                    self.context[context] = {}
+                if word not in self.context[context]:
+                    self.context[context][word] = 0
+                
+                self.context[context][word] += k
         
                   
     def probability_for_next_word(self, context, token):
@@ -58,11 +60,11 @@ class NGramLM():
             return 0.0
         
         try:
-            if ((context, token) not in self.n_gram_counter):
+            if ( token not in self.context[context]):
                 n_gram_count = 0
             else:
-                n_gram_count =  self.n_gram_counter[(context, token)]
-            context_count = float(len(self.context[context]))
+                n_gram_count =  self.context[context][token]
+            context_count = self.context_cnt[context]
             prob = n_gram_count / context_count
         except:
             prob = 0.0
@@ -71,7 +73,15 @@ class NGramLM():
     
     def generate_word(self, context):
         
-        return random.choices(self.context[context], k=1)[0]
+        p = random.random()
+        possible_next_words = list(self.context[context].keys())
+        total_context_count = self.context_cnt[context]
+        cur_sum = 0 
+        for next_word in possible_next_words:
+            cur_sum += self.context[context][next_word]
+            if( p <= cur_sum/total_context_count ):
+                return next_word
+        # return random.choices(self.context[context], k=1)[0]
     
     def generate_sentence(self, max_tokens):
         ### produces till </s>  or at max max_tokens
@@ -106,6 +116,23 @@ class NGramLM():
     
         return log_prob
                 
+    
+    def perplexity(self, text):
+        
+        log_prob_sum = 0.0
+        token_cnt = 0
+        _, tokenized_sentences = preprocess(text)
+        for sent in tokenized_sentences:
+            log_prob = self.log_prob(sent)
+            if(log_prob == float("-inf")):
+                return float("inf")
+            else:
+                log_prob_sum += log_prob
+            token_cnt += len(sent)-1
+        
+        return math.exp(-log_prob_sum / token_cnt)
+            
+        
                 
             
         
@@ -141,19 +168,12 @@ for tokenized_sentences in train_tokenized_sentences:
         LM.update(sent)
 
 #### add-k smoothing ###################
-# LM.add_k_smoothing(k=1)
+LM.add_k_smoothing(k=0.5)
 
 ################### TESTING ############ 
 test_book = f"./Harry_Potter_Text/Book7.txt"    
 test_text = read_data(test_book)
-test_voc, test_tokenized_sentences = preprocess(test_text)
 
-inf_count = 0 
-for sent in test_tokenized_sentences:
-    log_prob = LM.log_prob(sent)
-    if(log_prob != float("-inf")):
-        print(log_prob)
-    else:
-        inf_count += 1
-print(f"{inf_count/len(test_tokenized_sentences)*100}%")
+
+print(LM.perplexity(test_text))
 print( LM.generate_sentence(10) )
