@@ -46,20 +46,24 @@ def preprocess(text):
     ### add sentence delimiters and tokenize sentences
     tokenized_sentences = []
     total_number_tokens = 0
-    vocabulary  = set()
+    vocabulary  = {}
     for sent in sentences:
         tokenized_sentence = ["<s>"] + word_tokenize(sent) + ["</s>"]
         tokenized_sentences.append(tokenized_sentence)
         total_number_tokens += len(tokenized_sentence)
-        vocabulary.update(tokenized_sentence)
+        for token in tokenized_sentence:
+            if token in vocabulary:
+                vocabulary[token] += 1
+            else:
+                vocabulary[token] = 1
         
 
-    print(f"Vocabulary size: {len(vocabulary)}")
+    print(f"Vocabulary size: {len(vocabulary.keys())}")
     print(f"Number of Tokens: {total_number_tokens}")
     
     # # print(vocabulary)
     
-    return tokenized_sentences ## list of lists, where each list has several tokens in a sentence including the start of senetence and end of sentence
+    return vocabulary, tokenized_sentences ## list of lists, where each list has several tokens in a sentence including the start of senetence and end of sentence
 
 # text = read_data("./Harry_Potter_Text/Book1.txt") ### returns an entire string with some preprocessing
 # print(preprocess(text)[:5])

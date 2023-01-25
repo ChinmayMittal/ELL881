@@ -114,21 +114,39 @@ class NGramLM():
 train_books = range(1,7)
 LM = NGramLM(n=1)
 ########### TRAINING ###################
+vocabulary = {"<s>" : 0, "</s>" : 0 , "<unk>" : 0}
+
+train_tokenized_sentences = []
 for book in train_books:
     train_book = f"./Harry_Potter_Text/Book{book}.txt"
     print(f"{train_book} ....")
     text = read_data(train_book)
-    tokenized_sentences = preprocess(text)
+    local_voc, tokenized_sentences = preprocess(text)
+    for token in local_voc.keys():
+        if token in vocabulary:
+            vocabulary[token] += local_voc[token]
+        else:
+            vocabulary[token] = local_voc[token]
+    train_tokenized_sentences.append(tokenized_sentences)
+
+### write vocabulary to file
+vocab_tokens = list(vocabulary.keys())
+vocab_tokens.sort( reverse=True, key=vocabulary.__getitem__ )
+with open("vocab.txt", "w") as f:
+    for token in vocab_tokens:
+        f.write(f"{token}:{vocabulary[token]}\n")
+        
+for tokenized_sentences in train_tokenized_sentences:
     for sent in tokenized_sentences:
         LM.update(sent)
 
 #### add-k smoothing ###################
-LM.add_k_smoothing(k=1)
+# LM.add_k_smoothing(k=1)
 
 ################### TESTING ############ 
 test_book = f"./Harry_Potter_Text/Book7.txt"    
 test_text = read_data(test_book)
-test_tokenized_sentences = preprocess(test_text)
+test_voc, test_tokenized_sentences = preprocess(test_text)
 
 inf_count = 0 
 for sent in test_tokenized_sentences:
