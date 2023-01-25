@@ -17,6 +17,8 @@ class NGramLM():
         self.context = {} #### doubly index dict context -> next_word -> how many times next_word follows context
         self.context_cnt = {} ### count of how many times context has appeared
         self.vocabulary = set(("<s>", "</s>", "<unk>"))
+        self.add_k_smoothing_lazy_update = False
+        self.k = 0
         
     def update(self, sentence):
         
@@ -37,20 +39,23 @@ class NGramLM():
             self.context_cnt[context] += 1
             
                 
-    def add_k_smoothing(self, k=1):
+    def add_k_smoothing(self, k=1, lazy_update=False):
         
-        all_context = self.context.keys()
-        for context in all_context:
-            self.context_cnt[context] += k*len(self.vocabulary) ### every word in vocabulary is seen k more times
-            for word in self.vocabulary:
-                
-                if context not in self.context:
-                    self.context[context] = {}
-                if word not in self.context[context]:
-                    self.context[context][word] = 0
-                
-                self.context[context][word] += k
-        
+        if not lazy_update:
+            all_context = self.context.keys()
+            for context in all_context:
+                self.context_cnt[context] += k*len(self.vocabulary) ### every word in vocabulary is seen k more times
+                for word in self.vocabulary:
+                    
+                    if context not in self.context:
+                        self.context[context] = {}
+                    if word not in self.context[context]:
+                        self.context[context][word] = 0
+                    
+                    self.context[context][word] += k
+        else:
+            self.add_k_smoothing_lazy_update = True
+            self.k = k
                   
     def probability_for_next_word(self, context, token):
         ### probability of token given context
@@ -65,7 +70,10 @@ class NGramLM():
             else:
                 n_gram_count =  self.context[context][token]
             context_count = self.context_cnt[context]
-            prob = n_gram_count / context_count
+            if not self.add_k_smoothing_lazy_update:
+                prob = n_gram_count / context_count
+            else:
+                prob = (n_gram_count+self.k) / (context_count + self.k*len(self.vocabulary))
         except:
             prob = 0.0
         
@@ -74,12 +82,11 @@ class NGramLM():
     def generate_word(self, context):
         
         p = random.random()
-        possible_next_words = list(self.context[context].keys())
-        total_context_count = self.context_cnt[context]
-        cur_sum = 0 
+        possible_next_words = list(self.vocabulary)
+        cur_prob = 0 
         for next_word in possible_next_words:
-            cur_sum += self.context[context][next_word]
-            if( p <= cur_sum/total_context_count ):
+            cur_prob += self.probability_for_next_word(context, next_word)
+            if( p <= cur_prob ):
                 return next_word
         # return random.choices(self.context[context], k=1)[0]
     
@@ -139,7 +146,8 @@ class NGramLM():
 if __name__ == "__main__":        
  
     train_books = range(1,7)
-    LM = NGramLM(n=3)
+    n = 3
+    LM = NGramLM(n=n)
     ########### TRAINING ###################
     vocabulary = {"<s>" : 0, "</s>" : 0 , "<unk>" : 0}
 
@@ -168,7 +176,8 @@ if __name__ == "__main__":
             LM.update(sent)
 
     #### add-k smoothing ###################
-    LM.add_k_smoothing(k=0.1) 
+    lazy_smoothing_update = n > 1
+    LM.add_k_smoothing(k=0.1, lazy_update=lazy_smoothing_update) 
 
     ################### TESTING ############ 
     test_book = f"./Harry_Potter_Text/Book7.txt"    

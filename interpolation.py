@@ -25,6 +25,11 @@ class InterpolationLM():
         
         for model in self.models:
             model.update(sentence)
+    
+    def add_k_smoothing(self, k=1):
+        for i in range(1, self.n+1):
+            self.models[i-1].add_k_smoothing(k=k, lazy_update=True)        
+        
         
     def probability_for_next_word(self, context, token):
         ### context is a tuple of length n-1
@@ -126,9 +131,7 @@ if __name__ == "__main__":
             LM.update(sent)
     print("Trained")
     #### add-k smoothing ###################
-    for i in range(1, 2):
-        LM.models[i-1].add_k_smoothing(k=0.1)
-
+    LM.add_k_smoothing(k=0.01)
     ################### TESTING ############ 
     test_book = f"./Harry_Potter_Text/Book7.txt"    
     test_text = read_data(test_book)
