@@ -1,5 +1,6 @@
 import re
 import nltk
+import string
 from nltk.tokenize import word_tokenize, sent_tokenize
 
 nltk.download("punkt")
@@ -48,7 +49,9 @@ def preprocess(text):
     total_number_tokens = 0
     vocabulary  = {}
     for sent in sentences:
-        tokenized_sentence = ["<s>"] + word_tokenize(sent) + ["</s>"]
+        word_tokens = word_tokenize(sent)
+        word_tokens = [x for x in word_tokens if not re.fullmatch('[' + string.punctuation + ']+', x)]
+        tokenized_sentence = ["<s>"] + word_tokens + ["</s>"]
         tokenized_sentences.append(tokenized_sentence)
         total_number_tokens += len(tokenized_sentence)
         for token in tokenized_sentence:
@@ -65,5 +68,8 @@ def preprocess(text):
     
     return vocabulary, tokenized_sentences ## list of lists, where each list has several tokens in a sentence including the start of senetence and end of sentence
 
-# text = read_data("./Harry_Potter_Text/Book1.txt") ### returns an entire string with some preprocessing
+text = read_data("./Harry_Potter_Text/Book1.txt") ### returns an entire string with some preprocessing
+print(text)
+ts = preprocess(text)
+print(ts)
 # print(preprocess(text)[:5])
