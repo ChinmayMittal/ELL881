@@ -44,6 +44,7 @@ class StupidBackOffLM():
      
     def probability_for_next_word(self, context, token):
         
+        ### convert scores for all possible tokens into probabilities
         if context in self.raw_score_sum:
             return ( 1 / self.raw_score_sum[context] ) * self.probability_for_next_word_helper(context, token)
         all_possible_tokens = self.vocabulary
@@ -55,6 +56,7 @@ class StupidBackOffLM():
                    
     def probability_for_next_word_helper(self, context, token):
         
+        #### this returns score according to stupid back off 
         if token not in self.vocabulary:
             token = "<unk>"
         if len(context) == 0: ### recursive base case (unigram)
