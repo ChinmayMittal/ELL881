@@ -3,6 +3,13 @@ import math
 from preprocess import preprocess, read_data
 from n_gram import create_n_grams
 from tqdm import tqdm
+import argparse
+
+parser = argparse.ArgumentParser(description='N Gram Language Models with Stupid Backoff Smoothing ... ')
+parser.add_argument("-n", action="store", default=1, type=int)
+parser.add_argument("--generate", action="store", default=False, type=bool)
+parser.add_argument("--generate_cnt", action="store", default=1, type=int)
+args = parser.parse_args()
 
 class StupidBackOffLM():
     
@@ -145,9 +152,9 @@ class StupidBackOffLM():
 
 if __name__ == "__main__":        
  
-    train_books = range(1,7)
-    n = 3
-    LM = StupidBackOffLM(n=n)
+    train_books = range(1,6)
+    val_books = range(6,7)
+    LM = StupidBackOffLM(n=args.n)
     ########### TRAINING ###################
     vocabulary = {"<s>" : 0, "</s>" : 0 , "<unk>" : 0}
 
@@ -164,24 +171,24 @@ if __name__ == "__main__":
                 vocabulary[token] = local_voc[token]
         train_tokenized_sentences.append(tokenized_sentences)
 
-    ### write vocabulary to file
-    vocab_tokens = list(vocabulary.keys())
-    vocab_tokens.sort( reverse=True, key=vocabulary.__getitem__ )
-    with open("vocab.txt", "w") as f:
-        for token in vocab_tokens:
-            f.write(f"{token}:{vocabulary[token]}\n")
             
     for tokenized_sentences in train_tokenized_sentences:
         for sent in tokenized_sentences:
             LM.update(sent)
+            
+            
     ########### ADD-K Smoothing for base case unigram ############
-    LM.add_k_smoothing(k=0.1)
+    LM.add_k_smoothing(k=0.05)
+    
 
     ################### TESTING ############ 
     print("TESTING .... ")
     test_book = f"./Harry_Potter_Text/Book7.txt"    
     test_text = read_data(test_book)
-
-
     print(LM.perplexity(test_text))
-    print( LM.generate_sentence(10) )
+    ##########################################
+    
+    
+    if(args.generate):
+        for _ in range(args.generate_cnt):
+            print(LM.generate_sentence(10))
