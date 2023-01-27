@@ -61,15 +61,9 @@ def preprocess(text):
                 vocabulary[token] = 1
         
 
-    print(f"Vocabulary size: {len(vocabulary.keys())}")
-    print(f"Number of Tokens: {total_number_tokens}")
+    # print(f"Vocabulary size: {len(vocabulary.keys())}")
+    # print(f"Number of Tokens: {total_number_tokens}")
     
     # # print(vocabulary)
     
     return vocabulary, tokenized_sentences ## list of lists, where each list has several tokens in a sentence including the start of senetence and end of sentence
-
-text = read_data("./Harry_Potter_Text/Book1.txt") ### returns an entire string with some preprocessing
-print(text)
-ts = preprocess(text)
-print(ts)
-# print(preprocess(text)[:5])

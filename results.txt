@@ -1,0 +1,6 @@
+n-gram with add-k smoothing
+n k test
+1 2 776.31
+2 0.05 594.51
+3 0.05 3174.54
+4 0.05 7398.74

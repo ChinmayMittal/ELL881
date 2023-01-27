@@ -1,6 +1,18 @@
 import random
 import math
+import argparse
 from preprocess import preprocess, read_data
+from matplotlib import pyplot as plt
+
+parser = argparse.ArgumentParser(description='N Gram Language Models ... ')
+parser.add_argument("-n", action="store", default=1, type=int)
+parser.add_argument("--generate", action="store", default=False, type=bool)
+parser.add_argument("--generate_cnt", action="store", default=1, type=int)
+parser.add_argument("--smoothing", action="store", default=False, type=bool)
+parser.add_argument("--val", action="store", default=False, type=bool)
+parser.add_argument("--plot", action="store", default=False, type=bool)
+
+args = parser.parse_args()
 
 def create_n_grams(tokens, n=1):
     ### tokens is a list of tokens of a sentence including <s> and </s>
@@ -144,13 +156,16 @@ class NGramLM():
         
 if __name__ == "__main__":        
  
-    train_books = range(1,7)
-    n = 5
-    LM = NGramLM(n=n)
+    train_books = range(1,6)
+    val_books = range(6,7)
+    LM = NGramLM(n=args.n)
     ########### TRAINING ###################
     vocabulary = {"<s>" : 0, "</s>" : 0 , "<unk>" : 0}
 
     train_tokenized_sentences = []
+    val_text = None
+    
+    ### load train set
     for book in train_books:
         train_book = f"./Harry_Potter_Text/Book{book}.txt"
         print(f"{train_book} ....")
@@ -163,25 +178,72 @@ if __name__ == "__main__":
                 vocabulary[token] = local_voc[token]
         train_tokenized_sentences.append(tokenized_sentences)
 
-    ### write vocabulary to file
+    ### load val set ####
+    for book in val_books:
+        val_book = f"./Harry_Potter_Text/Book{book}.txt"
+        print(f"{val_book} ....")
+        val_text = read_data(val_book)
+    ### end loading val set ##
+
+    ### write vocabulary to file #####
     vocab_tokens = list(vocabulary.keys())
     vocab_tokens.sort( reverse=True, key=vocabulary.__getitem__ )
     with open("vocab.txt", "w") as f:
         for token in vocab_tokens:
             f.write(f"{token}:{vocabulary[token]}\n")
+    ###################################       
+    
+    ### Update Model  ####
+    if not args.val:
+        for tokenized_sentences in train_tokenized_sentences:
+            for sent in tokenized_sentences:
+                LM.update(sent)
+        if args.smoothing:
+            print("Smoothing .... ")
+            LM.add_k_smoothing(k=0.1, lazy_update=True) 
+    ############################
+    
+    #### validation for add-k smoothing ###################
+    
+    if args.val:
+        search_space = [0, 0.05, 0.1, 0.2, 0.3, 0.5, 0.6, 0.8, 1, 2, 3]
+        val_perplexity = [] 
+        best_model = None
+        best_k = 0
+        best_perplexity = float("inf")
+        for k in search_space:
+            LM = NGramLM(n=args.n)
+            for tokenized_sentences in train_tokenized_sentences:
+                for sent in tokenized_sentences:
+                    LM.update(sent) 
+            LM.add_k_smoothing(k=k, lazy_update=True)
+            val_perpl = LM.perplexity(val_text)
+            val_perplexity.append(val_perpl)
+            if val_perpl < best_perplexity:
+                best_perplexity = val_perpl
+                best_model = LM
+                best_k = k
+        LM = best_model
+        print(best_k)
+        if args.plot:
             
-    for tokenized_sentences in train_tokenized_sentences:
-        for sent in tokenized_sentences:
-            LM.update(sent)
+            plt.plot(search_space, val_perplexity)
+            plt.xlabel("K for Add-K Smoothing")
+            plt.ylabel("Validation Set Perplexity")
+            plt.title(f"Hyperparameter Tuning N:{args.n}")
+            plt.grid(True)
+            plt.savefig(f"graph-{args.n}.png")                       
 
-    #### add-k smoothing ###################
-    lazy_smoothing_update = n > 1
-    LM.add_k_smoothing(k=0.1, lazy_update=lazy_smoothing_update) 
-
+    
+ 
+    #########################################################
+    
     ################### TESTING ############ 
     test_book = f"./Harry_Potter_Text/Book7.txt"    
     test_text = read_data(test_book)
-
-
     print(LM.perplexity(test_text))
-    print( LM.generate_sentence(10) )
+    #########################################################
+    
+    if(args.generate):
+        for _ in range(args.generate_cnt):
+            print(LM.generate_sentence(20))
