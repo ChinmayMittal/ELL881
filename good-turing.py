@@ -1,10 +1,19 @@
 import random
 import math
+from tqdm import tqdm
+import argparse
+import numpy as np
+from sklearn.linear_model import LinearRegression
 from preprocess import preprocess, read_data
 from n_gram import create_n_grams
-from tqdm import tqdm
-from sklearn.linear_model import LinearRegression
-import numpy as np
+
+parser = argparse.ArgumentParser(description='N Gram Language Models ... ')
+parser.add_argument("-n", action="store", default=1, type=int)
+parser.add_argument("--generate", action="store", default=False, type=bool)
+parser.add_argument("--generate_cnt", action="store", default=1, type=int)
+
+args = parser.parse_args()
+
 
 class SimpleGoodTuringLM():
     
@@ -175,9 +184,9 @@ class SimpleGoodTuringLM():
 
 if __name__ == "__main__":        
  
-    train_books = range(1,7)
-    n = 2
-    LM = SimpleGoodTuringLM(n=n)
+    train_books = range(1,6)
+    val_books = range(6,7)
+    LM = SimpleGoodTuringLM(n=args.n)
     ########### TRAINING ###################
     vocabulary = {"<s>" : 0, "</s>" : 0 , "<unk>" : 0}
 
@@ -194,18 +203,23 @@ if __name__ == "__main__":
                 vocabulary[token] = local_voc[token]
         train_tokenized_sentences.append(tokenized_sentences)
 
-            
+
+    print("Training ... ")  
     for tokenized_sentences in train_tokenized_sentences:
         for sent in tokenized_sentences:
             LM.update(sent)
-            
+##############################################################
     
 
-    # ################### TESTING ############ 
+    ################### TESTING ############ 
+    print("TESTING .... ")
     test_book = f"./Harry_Potter_Text/Book7.txt"    
     test_text = read_data(test_book)
-
+    print(LM.perplexity(test_text))    
+    ########################################
     
 
-    print(LM.perplexity(test_text))
-    # print( LM.generate_sentence(10) )
+    
+    if(args.generate):
+        for _ in range(args.generate_cnt):
+            print(LM.generate_sentence(10))     

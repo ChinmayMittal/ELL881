@@ -12,3 +12,11 @@ N   test-perplexity
 2   322.50
 3   366.05
 4   630.722
+
+
+kneser-ney 
+N   perplexity
+1   785.94
+2   276.29
+3   308.681
+4   460.53

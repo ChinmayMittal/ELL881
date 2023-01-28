@@ -1,8 +1,16 @@
 import random
 import math
+import argparse
 from preprocess import preprocess, read_data
 from n_gram import create_n_grams
 from tqdm import tqdm
+
+parser = argparse.ArgumentParser(description='N Gram Language Models ... ')
+parser.add_argument("-n", action="store", default=1, type=int)
+parser.add_argument("--generate", action="store", default=False, type=bool)
+parser.add_argument("--generate_cnt", action="store", default=1, type=int)
+
+args = parser.parse_args()
 
 class KneserNeyLM():
     
@@ -107,7 +115,7 @@ class KneserNeyLM():
                 denominator = self.context_cnt[context]
                 numerator = 0.0
                 if(token in self.context[context]):
-                    numerator = max(len(self.context[context][token])-self.d, 0.0)
+                    numerator = max((self.context[context][token])-self.d, 0.0)
                     
                 return ( numerator / denominator) + (lambda_ / len(self.vocabulary))
             
@@ -208,9 +216,9 @@ class KneserNeyLM():
         
 if __name__ == "__main__":        
  
-    train_books = range(1,7)
-    n = 3
-    LM = KneserNeyLM(n=n, d=0.75)
+    train_books = range(1,6)
+    val_books = range(6,7)
+    LM = KneserNeyLM(n=args.n, d=0.75)
     ########### TRAINING ###################
     vocabulary = {"<s>" : 0, "</s>" : 0 , "<unk>" : 0}
 
@@ -227,12 +235,6 @@ if __name__ == "__main__":
                 vocabulary[token] = local_voc[token]
         train_tokenized_sentences.append(tokenized_sentences)
 
-    ### write vocabulary to file
-    vocab_tokens = list(vocabulary.keys())
-    vocab_tokens.sort( reverse=True, key=vocabulary.__getitem__ )
-    with open("vocab.txt", "w") as f:
-        for token in vocab_tokens:
-            f.write(f"{token}:{vocabulary[token]}\n")
      
     print("Training ... ")       
     for tokenized_sentences in tqdm(train_tokenized_sentences):
@@ -243,10 +245,12 @@ if __name__ == "__main__":
     print("TESTING .... ")
     test_book = f"./Harry_Potter_Text/Book7.txt"    
     test_text = read_data(test_book)
-
-
-    print(LM.perplexity(test_text))
-    print( LM.generate_sentence(10) )                
+    print(LM.perplexity(test_text))    
+    ########################################
+    
+    if(args.generate):
+        for _ in range(args.generate_cnt):
+            print(LM.generate_sentence(10))         
     
         
     
