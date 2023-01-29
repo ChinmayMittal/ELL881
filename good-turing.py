@@ -7,7 +7,7 @@ from sklearn.linear_model import LinearRegression
 from preprocess import preprocess, read_data
 from n_gram import create_n_grams
 
-parser = argparse.ArgumentParser(description='N Gram Language Models ... ')
+parser = argparse.ArgumentParser(description='N Gram Language Models with Good Turing Smoothing... ')
 parser.add_argument("-n", action="store", default=1, type=int)
 parser.add_argument("--generate", action="store", default=False, type=bool)
 parser.add_argument("--generate_cnt", action="store", default=1, type=int)
@@ -208,7 +208,7 @@ if __name__ == "__main__":
     for tokenized_sentences in train_tokenized_sentences:
         for sent in tokenized_sentences:
             LM.update(sent)
-##############################################################
+    ###########################################################
     
 
     ################### TESTING ############ 

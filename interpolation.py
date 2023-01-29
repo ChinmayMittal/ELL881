@@ -1,7 +1,18 @@
 import random
 import math
+import argparse
+import tqdm
 from n_gram import NGramLM
 from preprocess import preprocess, read_data
+
+parser = argparse.ArgumentParser(description='N Gram Language Models with Interpolation Smoothing ... ')
+parser.add_argument("-n", action="store", default=1, type=int)
+parser.add_argument("--generate", action="store", default=False, type=bool)
+parser.add_argument("--generate_cnt", action="store", default=1, type=int)
+parser.add_argument("--val", action="store", default=False, type=bool)
+parser.add_argument("--smoothing", action="store", default=False, type=bool)
+
+args = parser.parse_args()
 
 
 class InterpolationLM():
@@ -26,9 +37,9 @@ class InterpolationLM():
         for model in self.models:
             model.update(sentence)
     
-    def add_k_smoothing(self, k=1):
+    def add_k_smoothing(self, k=1, lazy_update=False):
         for i in range(1, self.n+1):
-            self.models[i-1].add_k_smoothing(k=k, lazy_update=True)        
+            self.models[i-1].add_k_smoothing(k=k, lazy_update=lazy_update)        
         
         
     def probability_for_next_word(self, context, token):
@@ -101,12 +112,17 @@ class InterpolationLM():
         
         
 if __name__ == "__main__":
-    train_books = range(1,7)
-    LM = InterpolationLM(n=3, interpolation_weights=[0.25, 0.25, 0.5])
+    
+    train_books = range(1,6)
+    val_books = range(6,7)
+    LM = InterpolationLM(n=args.n, interpolation_weights=[1/args.n for _ in range(args.n)])
     ########### TRAINING ###################
     vocabulary = {"<s>" : 0, "</s>" : 0 , "<unk>" : 0}
 
     train_tokenized_sentences = []
+    val_text = None
+    
+    ### load train set 
     for book in train_books:
         train_book = f"./Harry_Potter_Text/Book{book}.txt"
         print(f"{train_book} ....")
@@ -119,24 +135,72 @@ if __name__ == "__main__":
                 vocabulary[token] = local_voc[token]
         train_tokenized_sentences.append(tokenized_sentences)
 
-    ### write vocabulary to file
-    vocab_tokens = list(vocabulary.keys())
-    vocab_tokens.sort( reverse=True, key=vocabulary.__getitem__ )
-    with open("vocab.txt", "w") as f:
-        for token in vocab_tokens:
-            f.write(f"{token}:{vocabulary[token]}\n")
+    ### load val set ####
+    for book in val_books:
+        val_book = f"./Harry_Potter_Text/Book{book}.txt"
+        print(f"{val_book} ....")
+        val_text = read_data(val_book)
+    ### end loading val set ##
+    
+    if not args.val:
+        ### Default Training Strategy with Uniform Interpolation Weights
+        for tokenized_sentences in train_tokenized_sentences:
+            for sent in tokenized_sentences:
+                LM.update(sent)
+        print("Trained")
+        if args.smoothing:
+            print("Smoothing .... ")
+            LM.add_k_smoothing(k=0.1, lazy_update=True)
+    else:
+        #### use validation set to find interpolation weights
+        ### GRID SEARCH IMPLEMENTATION TO FIND INTERPOLATION WEIGHTS
+        search_space_1D = [0.2, 0.4, 0.6, 0.8, 1]
+        search_space_ND = [(ele, ) for ele in search_space_1D]
+        best_LM = None
+        best_val_perplexity = float("inf")
+        best_interpolation_weights = None
+        ### Generate the entire search space
+        for i in range(1,args.n):
+            new_search_space_ND = []
+            for x in search_space_1D:
+                for y in search_space_ND:
+                    new_search_space_ND.append(y+(x,))
+            search_space_ND = new_search_space_ND
             
-    for tokenized_sentences in train_tokenized_sentences:
-        for sent in tokenized_sentences:
-            LM.update(sent)
-    print("Trained")
-    #### add-k smoothing ###################
-    LM.add_k_smoothing(k=0.01)
+        new_search_space_ND = []
+        ### normalzing interpolation weights
+        for ele in search_space_ND:
+            normalizing_factor = sum(ele)
+            new_search_space_ND.append(tuple(ti/normalizing_factor for ti in ele))
+        search_space_ND = new_search_space_ND
+        
+        print("Validation ... ")
+        for hp in tqdm.tqdm(search_space_ND):
+            LM = InterpolationLM(n=args.n, interpolation_weights=hp)
+            for tokenized_sentences in train_tokenized_sentences:
+                for sent in tokenized_sentences:
+                    LM.update(sent)
+            LM.add_k_smoothing(k=0.1, lazy_update=True)
+            val_perplexity = LM.perplexity(val_text)
+            if val_perplexity < best_val_perplexity:
+                best_val_perplexity = val_perplexity
+                best_LM = LM
+                best_interpolation_weights = hp
+        LM = best_LM
+        print(best_interpolation_weights, best_val_perplexity)
+            
+        
+                    
+
+            
     ################### TESTING ############ 
     test_book = f"./Harry_Potter_Text/Book7.txt"    
     test_text = read_data(test_book)
-
-
     print(LM.perplexity(test_text))
-    print( LM.generate_sentence(10) )
+    #######################################
+    
+    ######### SENTENCE GENERATION ###########
+    if(args.generate):
+        for _ in range(args.generate_cnt):
+            print(LM.generate_sentence(20))
     

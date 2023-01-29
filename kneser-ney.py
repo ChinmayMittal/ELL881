@@ -5,7 +5,7 @@ from preprocess import preprocess, read_data
 from n_gram import create_n_grams
 from tqdm import tqdm
 
-parser = argparse.ArgumentParser(description='N Gram Language Models ... ')
+parser = argparse.ArgumentParser(description='N Gram Language Models with Kneser Ney Smoothing ... ')
 parser.add_argument("-n", action="store", default=1, type=int)
 parser.add_argument("--generate", action="store", default=False, type=bool)
 parser.add_argument("--generate_cnt", action="store", default=1, type=int)
