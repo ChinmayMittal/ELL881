@@ -1,0 +1,19 @@
+## EMBEDDINGS
+embed_dim: 300
+
+### DATA:
+train_path: data/train.txt
+test_path: data/test.txt
+
+
+### TRAINING
+train_batch_size: 32
+train_shuffle: False
+num_epochs: 10
+freeze_embeddings: True
+hidden_dim: 512
+learning_rate: 3e-4
+
+
+### TESTING
+test_batch_size: 64
